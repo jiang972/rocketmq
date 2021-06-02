@@ -47,6 +47,10 @@ public class NamesrvStartup {
     private static Properties properties = null;
     private static CommandLine commandLine = null;
 
+    /**
+     * nameServer的启动，其实就是大量配置的初始化，然后核心的NameSrvController组件的初始化和启动，然后初始化并启动了一个Netty服务监听9876端口
+     * @param args
+     */
     public static void main(String[] args) {
         main0(args);
     }
@@ -54,6 +58,7 @@ public class NamesrvStartup {
     public static NamesrvController main0(String[] args) {
 
         try {
+            //创建NameServer核心启动类，并将其启动
             NamesrvController controller = createNamesrvController(args);
             start(controller);
             String tip = "The Name Server boot success. serializeType=" + RemotingCommand.getSerializeTypeConfigInThisServer();
@@ -68,7 +73,15 @@ public class NamesrvStartup {
         return null;
     }
 
+    /**
+     * 其实就是初始化、解析NameServerConfig，NettyServerConfig
+     * @param args
+     * @return
+     * @throws IOException
+     * @throws JoranException
+     */
     public static NamesrvController createNamesrvController(String[] args) throws IOException, JoranException {
+        //这块大概就是命令行参数解析，不是核心逻辑
         System.setProperty(RemotingCommand.REMOTING_VERSION_KEY, Integer.toString(MQVersion.CURRENT_VERSION));
         //PackageConflictDetect.detectFastjson();
 
@@ -79,9 +92,14 @@ public class NamesrvStartup {
             return null;
         }
 
+        //这里三行才是核心，创建了nameServer和netty的核心配置类，写死了9876这个端口
         final NamesrvConfig namesrvConfig = new NamesrvConfig();
         final NettyServerConfig nettyServerConfig = new NettyServerConfig();
         nettyServerConfig.setListenPort(9876);
+        /**
+         * 如果调起nameserver的脚本带着参数c（后面跟配置文件地址），就会基于流把配置文件的配置读出来，读取的配置会被加载到一个Properties里面去
+         * 然后就可以基于 MixAll.properties2Object 工具类把读取到的配置都放到核心配置文件里面去了
+         */
         if (commandLine.hasOption('c')) {
             String file = commandLine.getOptionValue('c');
             if (file != null) {
@@ -98,6 +116,9 @@ public class NamesrvStartup {
             }
         }
 
+        /**
+         * 如果调起nameserver的脚本带着参数p,则会把namesrvConfig和nettyServerConfig内容都打印出来
+         */
         if (commandLine.hasOption('p')) {
             InternalLogger console = InternalLoggerFactory.getLogger(LoggerName.NAMESRV_CONSOLE_NAME);
             MixAll.printObjectProperties(console, namesrvConfig);
@@ -105,6 +126,7 @@ public class NamesrvStartup {
             System.exit(0);
         }
 
+        //把namesrv命令行的参数读取出来，写入config
         MixAll.properties2Object(ServerUtil.commandLine2Properties(commandLine), namesrvConfig);
 
         if (null == namesrvConfig.getRocketmqHome()) {
@@ -112,12 +134,16 @@ public class NamesrvStartup {
             System.exit(-2);
         }
 
+        /**
+         * 这块不理解也没事，看变量名，大概就是log和config相关的内容
+         */
         LoggerContext lc = (LoggerContext) LoggerFactory.getILoggerFactory();
         JoranConfigurator configurator = new JoranConfigurator();
         configurator.setContext(lc);
         lc.reset();
         configurator.doConfigure(namesrvConfig.getRocketmqHome() + "/conf/logback_namesrv.xml");
 
+        //打印NameServer的全部配置信息
         log = InternalLoggerFactory.getLogger(LoggerName.NAMESRV_LOGGER_NAME);
 
         MixAll.printObjectProperties(log, namesrvConfig);
@@ -137,12 +163,14 @@ public class NamesrvStartup {
             throw new IllegalArgumentException("NamesrvController is null");
         }
 
+        //初始化netty服务
         boolean initResult = controller.initialize();
         if (!initResult) {
             controller.shutdown();
             System.exit(-3);
         }
 
+        //创建一个jvm shutdown时候的钩子，jvm关闭的时候会执行注册的函数，就是controller.shutdown()。其实就是释放netty资源
         Runtime.getRuntime().addShutdownHook(new ShutdownHookThread(log, new Callable<Void>() {
             @Override
             public Void call() throws Exception {
@@ -151,6 +179,7 @@ public class NamesrvStartup {
             }
         }));
 
+        //配置并启动netty
         controller.start();
 
         return controller;

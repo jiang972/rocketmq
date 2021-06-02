@@ -413,6 +413,7 @@ public abstract class NettyRemotingAbstract {
             final ResponseFuture responseFuture = new ResponseFuture(channel, opaque, timeoutMillis, null, null);
             this.responseTable.put(opaque, responseFuture);
             final SocketAddress addr = channel.remoteAddress();
+            //从这开始比较重要，基于netty的开发，核心就是基于Channel吧请求写出去
             channel.writeAndFlush(request).addListener(new ChannelFutureListener() {
                 @Override
                 public void operationComplete(ChannelFuture f) throws Exception {
@@ -429,7 +430,7 @@ public abstract class NettyRemotingAbstract {
                     log.warn("send a request command to channel <" + addr + "> failed.");
                 }
             });
-
+            //等待请求响应结果
             RemotingCommand responseCommand = responseFuture.waitResponse(timeoutMillis);
             if (null == responseCommand) {
                 if (responseFuture.isSendRequestOK()) {

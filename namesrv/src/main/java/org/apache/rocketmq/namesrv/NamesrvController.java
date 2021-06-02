@@ -77,13 +77,15 @@ public class NamesrvController {
 
         this.kvConfigManager.load();
 
+        //创建netty服务(核心)
         this.remotingServer = new NettyRemotingServer(this.nettyServerConfig, this.brokerHousekeepingService);
 
+        //创建netty服务器的工作线程池
         this.remotingExecutor =
             Executors.newFixedThreadPool(nettyServerConfig.getServerWorkerThreads(), new ThreadFactoryImpl("RemotingExecutorThread_"));
-
+        //把工作线程池交给netty，注册请求处理器
         this.registerProcessor();
-
+        //启动后台线程，定时扫描没有心跳的broker
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
             @Override
@@ -92,6 +94,7 @@ public class NamesrvController {
             }
         }, 5, 10, TimeUnit.SECONDS);
 
+        //开启一个线程定时打印kv日志
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
             @Override
@@ -100,6 +103,7 @@ public class NamesrvController {
             }
         }, 1, 10, TimeUnit.MINUTES);
 
+        //实在看不懂无视就好，这太难了
         if (TlsSystemConfig.tlsMode != TlsMode.DISABLED) {
             // Register a listener to reload SslContext
             try {
@@ -143,16 +147,17 @@ public class NamesrvController {
 
     private void registerProcessor() {
         if (namesrvConfig.isClusterTest()) {
-
+            //处理测试集群的
             this.remotingServer.registerDefaultProcessor(new ClusterTestRequestProcessor(this, namesrvConfig.getProductEnvName()),
                 this.remotingExecutor);
         } else {
-
+            //注册了一个组件，netty收到的网络请求都会由他处理
             this.remotingServer.registerDefaultProcessor(new DefaultRequestProcessor(this), this.remotingExecutor);
         }
     }
 
     public void start() throws Exception {
+        //启动nettyRemoteServer
         this.remotingServer.start();
 
         if (this.fileWatchService != null) {

@@ -55,12 +55,13 @@ public class BrokerStartup {
     public static InternalLogger log;
 
     public static void main(String[] args) {
+        //创建一个Controller，然后启动它，跟NameServer类似的逻辑
         start(createBrokerController(args));
     }
 
     public static BrokerController start(BrokerController controller) {
         try {
-
+            //主要就这一个
             controller.start();
 
             String tip = "The broker[" + controller.getBrokerConfig().getBrokerName() + ", "
@@ -87,7 +88,18 @@ public class BrokerStartup {
         }
     }
 
+    /**
+     * NettyServerConfig
+     * NettyClientConfig
+     * BrokerConfig
+     * MessageStoreConfig
+     * 核心四大配置类
+     * 我们启动一个Broker，其实是启动一个JVM进程，启动一个管理控制组件，去控制网络请求，后台线程，管理磁盘数据等
+     * @param args
+     * @return
+     */
     public static BrokerController createBrokerController(String[] args) {
+        //设置一个系统级别的变量，不需要懂
         System.setProperty(RemotingCommand.REMOTING_VERSION_KEY, Integer.toString(MQVersion.CURRENT_VERSION));
 
         if (null == System.getProperty(NettySystemConfig.COM_ROCKETMQ_REMOTING_SOCKET_SNDBUF_SIZE)) {
@@ -100,6 +112,7 @@ public class BrokerStartup {
 
         try {
             //PackageConflictDetect.detectFastjson();
+            //解析命令行给broker的一些参数的
             Options options = ServerUtil.buildCommandlineOptions(new Options());
             commandLine = ServerUtil.parseCmdLine("mqbroker", args, buildCommandlineOptions(options),
                 new PosixParser());
@@ -107,20 +120,25 @@ public class BrokerStartup {
                 System.exit(-1);
             }
 
+            //核心配置类，broker，netty客户端，netty服务端
             final BrokerConfig brokerConfig = new BrokerConfig();
             final NettyServerConfig nettyServerConfig = new NettyServerConfig();
             final NettyClientConfig nettyClientConfig = new NettyClientConfig();
 
+            //设置了是否使用TLS（加密机制）
             nettyClientConfig.setUseTLS(Boolean.parseBoolean(System.getProperty(TLS_ENABLE,
                 String.valueOf(TlsSystemConfig.tlsMode == TlsMode.ENFORCING))));
+            //写死监听端口号
             nettyServerConfig.setListenPort(10911);
+            //创建存储消息的配置信息类
             final MessageStoreConfig messageStoreConfig = new MessageStoreConfig();
-
+            //如果当前broker是从机，则需要一些特殊的配置
             if (BrokerRole.SLAVE == messageStoreConfig.getBrokerRole()) {
                 int ratio = messageStoreConfig.getAccessMessageInMemoryMaxRatio() - 10;
                 messageStoreConfig.setAccessMessageInMemoryMaxRatio(ratio);
             }
 
+            //下面这段一下就看懂了，不必解释，不过MixAll工具是把参数一的值覆盖参数二的值
             if (commandLine.hasOption('c')) {
                 String file = commandLine.getOptionValue('c');
                 if (file != null) {
@@ -162,6 +180,7 @@ public class BrokerStartup {
                 }
             }
 
+            //根据broker的不同身份，做不同操作
             switch (messageStoreConfig.getBrokerRole()) {
                 case ASYNC_MASTER:
                 case SYNC_MASTER:
@@ -177,11 +196,11 @@ public class BrokerStartup {
                 default:
                     break;
             }
-
+            //如果使用了Dledger，就把brokerId设置为-1
             if (messageStoreConfig.isEnableDLegerCommitLog()) {
                 brokerConfig.setBrokerId(-1);
             }
-
+            //配置HA端口，在下面就是log相关得了
             messageStoreConfig.setHaListenPort(nettyServerConfig.getListenPort() + 1);
             LoggerContext lc = (LoggerContext) LoggerFactory.getILoggerFactory();
             JoranConfigurator configurator = new JoranConfigurator();
@@ -211,6 +230,8 @@ public class BrokerStartup {
             MixAll.printObjectProperties(log, nettyClientConfig);
             MixAll.printObjectProperties(log, messageStoreConfig);
 
+            //创建broker的管理控制组件，对于nameServer也是一样的，controller就是这个意思，主要就是控制当前这个broker
+            //初始化核心功能组件和后台线程池
             final BrokerController controller = new BrokerController(
                 brokerConfig,
                 nettyServerConfig,
@@ -219,12 +240,14 @@ public class BrokerStartup {
             // remember all configs to prevent discard
             controller.getConfiguration().registerConfig(properties);
 
+            //触发Controller初始化
             boolean initResult = controller.initialize();
             if (!initResult) {
                 controller.shutdown();
                 System.exit(-3);
             }
 
+            //JVM钩子，释放一堆资源
             Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
                 private volatile boolean hasShutdown = false;
                 private AtomicInteger shutdownTimes = new AtomicInteger(0);

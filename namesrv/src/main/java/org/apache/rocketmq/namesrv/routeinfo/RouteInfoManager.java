@@ -99,6 +99,7 @@ public class RouteInfoManager {
         return topicList.encode();
     }
 
+    //注册broker
     public RegisterBrokerResult registerBroker(
         final String clusterName,
         final String brokerAddr,
@@ -111,18 +112,23 @@ public class RouteInfoManager {
         RegisterBrokerResult result = new RegisterBrokerResult();
         try {
             try {
+                //加一个写锁
                 this.lock.writeLock().lockInterruptibly();
 
+                //根据集群名获取brokerName的set集合
                 Set<String> brokerNames = this.clusterAddrTable.get(clusterName);
                 if (null == brokerNames) {
                     brokerNames = new HashSet<String>();
                     this.clusterAddrTable.put(clusterName, brokerNames);
                 }
+                //set会自动去重
                 brokerNames.add(brokerName);
 
                 boolean registerFirst = false;
 
+                //通过brokerName查询broker的数据，brokerAddrTable作为核心路由数据表，存放所有broker的详细路由
                 BrokerData brokerData = this.brokerAddrTable.get(brokerName);
+                //如果是第一次注册就是进入这里，封装一个新的brokerData，写入路由表
                 if (null == brokerData) {
                     registerFirst = true;
                     brokerData = new BrokerData(clusterName, brokerName, new HashMap<Long, String>());
@@ -156,6 +162,7 @@ public class RouteInfoManager {
                     }
                 }
 
+                //每次心跳，都会new一个新的BrokerLiveInfo放入map，这里面有当前时间戳，能代表最近一次的心跳时间
                 BrokerLiveInfo prevBrokerLiveInfo = this.brokerLiveTable.put(brokerAddr,
                     new BrokerLiveInfo(
                         System.currentTimeMillis(),
@@ -426,6 +433,8 @@ public class RouteInfoManager {
         return null;
     }
 
+    //开启一个后台线程，每十秒扫描一下
+    //他直接扫描的broker注册更新的那个数据结构，拿到最后心跳时间，超过默认的120秒就认为死了
     public void scanNotActiveBroker() {
         Iterator<Entry<String, BrokerLiveInfo>> it = this.brokerLiveTable.entrySet().iterator();
         while (it.hasNext()) {
@@ -435,6 +444,7 @@ public class RouteInfoManager {
                 RemotingUtil.closeChannel(next.getValue().getChannel());
                 it.remove();
                 log.warn("The broker channel expired, {} {}ms", next.getKey(), BROKER_CHANNEL_EXPIRED_TIME);
+                //把broker从路由数据表删除
                 this.onChannelDestroy(next.getKey(), next.getValue().getChannel());
             }
         }

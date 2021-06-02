@@ -78,7 +78,7 @@ public class DefaultRequestProcessor extends AsyncNettyRequestProcessor implemen
                 request);
         }
 
-
+        //根据请求不同，有不同的处理过程
         switch (request.getCode()) {
             case RequestCode.PUT_KV_CONFIG:
                 return this.putKVConfig(ctx, request);
@@ -89,10 +89,12 @@ public class DefaultRequestProcessor extends AsyncNettyRequestProcessor implemen
             case RequestCode.QUERY_DATA_VERSION:
                 return queryBrokerTopicConfig(ctx, request);
             case RequestCode.REGISTER_BROKER:
+                //注册broker的
                 Version brokerVersion = MQVersion.value2Version(request.getVersion());
                 if (brokerVersion.ordinal() >= MQVersion.Version.V3_0_11.ordinal()) {
                     return this.registerBrokerWithFilterServer(ctx, request);
                 } else {
+                    //核心注册请求处理逻辑
                     return this.registerBroker(ctx, request);
                 }
             case RequestCode.UNREGISTER_BROKER:
@@ -296,7 +298,7 @@ public class DefaultRequestProcessor extends AsyncNettyRequestProcessor implemen
             topicConfigWrapper.getDataVersion().setCounter(new AtomicLong(0));
             topicConfigWrapper.getDataVersion().setTimestamp(0);
         }
-
+        //调用RouteIfoManager核心功能组件（路由信息管理组件）
         RegisterBrokerResult result = this.namesrvController.getRouteInfoManager().registerBroker(
             requestHeader.getClusterName(),
             requestHeader.getBrokerAddr(),

@@ -96,6 +96,7 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
     public NettyRemotingServer(final NettyServerConfig nettyServerConfig,
         final ChannelEventListener channelEventListener) {
         super(nettyServerConfig.getServerOnewaySemaphoreValue(), nettyServerConfig.getServerAsyncSemaphoreValue());
+        //这里是创建nerry服务的核心，ServerBootstrap是netty核心类，代表一个netty网络服务器
         this.serverBootstrap = new ServerBootstrap();
         this.nettyServerConfig = nettyServerConfig;
         this.channelEventListener = channelEventListener;
@@ -195,6 +196,7 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
 
         prepareSharableHandlers();
 
+        //基于netty的api配置和启动一个netty
         ServerBootstrap childHandler =
             this.serverBootstrap.group(this.eventLoopGroupBoss, this.eventLoopGroupSelector)
                 .channel(useEpoll() ? EpollServerSocketChannel.class : NioServerSocketChannel.class)
@@ -205,6 +207,7 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
                 .childOption(ChannelOption.SO_SNDBUF, nettyServerConfig.getServerSocketSndBufSize())
                 .childOption(ChannelOption.SO_RCVBUF, nettyServerConfig.getServerSocketRcvBufSize())
                 .localAddress(new InetSocketAddress(this.nettyServerConfig.getListenPort()))
+                    //设置了一堆网络请求处理器
                 .childHandler(new ChannelInitializer<SocketChannel>() {
                     @Override
                     public void initChannel(SocketChannel ch) throws Exception {
@@ -225,6 +228,7 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
         }
 
         try {
+            //绑定和监听一个端口号
             ChannelFuture sync = this.serverBootstrap.bind().sync();
             InetSocketAddress addr = (InetSocketAddress) sync.channel().localAddress();
             this.port = addr.getPort();
